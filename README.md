@@ -6,6 +6,8 @@ A **Flask** web server on a **Raspberry Pi 4** serves a browser control panel an
 servo commands over **USB serial** to the **Adeept Arm Drive Board** (ATmega328P, Arduino Uno
 compatible). The board drives the five servos and shows `REMOTE CONTROL` on its OLED screen.
 
+![Robot Arm Control web panel](docs/control-panel.png)
+
 ```
  Browser (PC / phone)               Raspberry Pi 4                     Adeept Arm Drive Board
 ┌──────────────────┐  HTTP :5000  ┌────────────────────┐  USB serial  ┌───────────────────────┐
@@ -41,6 +43,8 @@ RoboticsAdeept/
 │   └── index.html          # Browser control panel (sliders, 3D preview, record/playback)
 ├── deploy/
 │   └── robot-arm.service   # systemd unit to start the server at boot
+├── docs/
+│   └── control-panel.png   # screenshot used in this README
 ├── requirements.txt        # Python dependencies (flask, pyserial)
 ├── .gitignore
 └── README.md
@@ -392,9 +396,11 @@ If your user is not `pi`, or you cloned somewhere other than `~/RoboticsAdeept`,
 
 ### Control panel
 
-- **Sliders**: move each joint live.
-- **Save positions**: store poses for playback.
-- **Start / Stop playback**: loop smoothly through the saved poses.
+- **Sliders** (Base, Lower Leg, Upper Arm, Neck, Bite): move each joint live; the 3D view on the right mirrors the pose.
+- **Reset to Home Position**: return all joints to the home angles.
+- **Save Position**: store the current pose in the next free slot (Pos 1–3).
+- **Play / Stop**: loop smoothly through the saved poses, or stop.
+- **Reset Positions**: clear the saved slots.
 
 Start with small movements. If a joint buzzes against a mechanical stop, move it back right away.
 
