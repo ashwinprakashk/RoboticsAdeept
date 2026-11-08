@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Robot Arm Control</title>
+  <meta charset="UTF-8">
+  <style>
+    .pose-thumb {
+      width: 140px;
+      height: 140px;
+      background: #1b222b;
+      border-radius: 12px;
+      margin-top: 10px;
+      box-shadow: 0 0 10px rgba(255,85,85,0.3);
+    }
+
+    .pos-container {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+
+    .pos-pill {
+    width: 220px;
+    min-height: 280px;     /* ← big enough for thumbnail + text */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+    gap: 10px;             /* spacing between elements */
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    background: #222831;
+    color: #aaa;
+    border: 1px solid #333;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 10px rgba(0,0,0,0.4);
+    }
+
+    .pos-pill.saved {
+        background: #df8257;          /* warm orange-red */
+        color: white;
+        border-color: #ff9a6b;
+        box-shadow: 0 0 12px rgba(255,140,80,0.6);
+    }
+
+    @keyframes blink {
+      0% { opacity: 1; }
+      50% { opacity: 0.3; }
+      100% { opacity: 1; }
+    }
+
+    .playing {
+      animation: blink 1s infinite;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: "Segoe UI", Roboto, Arial, sans-serif;
+      background: #0f141a;
+      color: #e6edf3;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1 {
+      margin: 20px;
+      font-size: 32px;
+      font-weight: 600;
+      color: #ff5555;
+      text-shadow: 0 0 10px rgba(255,85,85,0.4);
+    }
+
+    .layout {
+      display: flex;
+      flex-direction: row;
+      width: 100%;
+      max-width: 1400px;
+      padding: 20px;
+      box-sizing: border-box;
+      gap: 20px;
+    }
+
+    .container {
+      flex: 1;
+      max-width: 600px;
+    }
+
+    .preview-wrapper {
+      flex: 1;
+      position: relative;
+      min-height: 400px;
+      background: #11161d;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.6);
+      overflow: hidden;
+    }
+
+    #preview3d {
+      position: absolute;
+      width: 80%;
+      height: 80%;
+      top: 10%;
+      left: 10%;
+      border-radius: 12px;
+      background: #1b222b;
+      box-shadow: 0 0 20px rgba(0,0,0,0.7);
+      touch-action: none;
+    }
+
+    .servo-card {
+      background: #161b22;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 12px;
+      box-shadow: 0 0 12px rgba(0,0,0,0.4);
+      transition: transform 0.15s ease;
+    }
+
+    .servo-card:hover {
+      transform: scale(1.02);
+    }
+
+    .servo-label {
+      font-size: 20px;
+      margin-bottom: 12px;
+      color: #ff7b7b;
+      font-weight: 500;
+    }
+
+    input[type=range] {
+      width: 100%;
+      height: 6px;
+      border-radius: 5px;
+      background: #30363d;
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #ff5555;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(255,85,85,0.7);
+    }
+
+    .reset-btn {
+      margin-top: 10px;
+      padding: 14px 30px;
+      font-size: 18px;
+      background: #a02020;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 0 12px rgba(160,32,32,0.5);
+      transition: background 0.2s ease, transform 0.15s ease;
+    }
+
+    .reset-btn:hover {
+      background: #c53030;
+      transform: scale(1.05);
+    }
+
+    @media (max-width: 768px) {
+      .layout {
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .preview-wrapper {
+        width: 100%;
+        min-height: 300px;
+      }
+
+      #preview3d {
+        width: 90%;
+        height: 250px;
+        top: 20px;
+        left: 5%;
+      }
+
+      .container {
+        width: 100%;
+        max-width: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<h1>Robot Arm Control</h1>
+
+<div class="layout">
+  <div class="container" id="sliders"></div>
+
+  <div class="preview-wrapper">
+    <div id="preview3d"></div>
+  </div>
+</div>
+
+<button class="reset-btn" onclick="resetAll()">Reset to Home Position</button>
+<div style="margin-top:20px; display:flex; gap:10px;">
+  <button class="reset-btn" onclick="saveNext()">Save Position</button>
+  <button id="playBtn" class="reset-btn" onclick="startPlayback()">Play</button>
+  <button class="reset-btn" onclick="stopPlayback()">Stop</button>
+  <button class="reset-btn" onclick="resetPositions()">Reset Positions</button>
+</div>
+<div id="posStatus" style="margin-top:20px; text-align:center;"></div>
+
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+
+<script>
+/* ------------------ GLOBAL STATE ------------------ */
+let robotReady = false;
+const servoNames = ["Base", "Lower Leg", "Upper Arm", "Neck", "Bite"];
+const homeAngles = [13, 70, 156, 76, 98]; // keep as you had
+
+let currentAngles = [...homeAngles];
+let playing = false;
+let savedPos = [null, null, null];
+let saveIndex = 0;
+
+/* ------------------ POLL CURRENT ANGLES DURING PLAYBACK ------------------ */
+setInterval(() => {
+    if (!playing) return;
+
+    fetch("/current")
+        .then(r => r.json())
+        .then(data => {
+            const angles = data.angles; // servo-space
+
+            const uiAngles = [
+                angles[0],
+                180 - angles[1], // Lower Leg inverted
+                angles[2],
+                angles[3],
+                angles[4]
+            ];
+
+            currentAngles = uiAngles;
+
+            for (let i = 0; i < 5; i++) {
+                const s = document.getElementById("servo" + i);
+                if (s) s.value = uiAngles[i];
+                updateVal(i, uiAngles[i]);
+            }
+
+            update3DFromAngles(uiAngles);
+        })
+        .catch(() => {});
+}, 80);
+
+/* ------------------ SEND COMMAND ------------------ */
+function send(index, value) {
+    fetch('/cmd', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ index, value })
+    });
+}
+
+function resetPositions() {
+    savedPos = [null, null, null];
+    saveIndex = 0;
+    updatePosStatus();
+
+    fetch("/save_positions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ positions: savedPos })
+    });
+}
+
+function updateVal(i, v) {
+    const el = document.getElementById("val" + i);
+    if (el) el.innerText = v;
+}
+
+/* ------------------ 3D SCENE ------------------ */
+let scene, camera, renderer;
+let baseGroup, lowerGroup, upperGroup, neckGroup, biteGroup;
+
+function matBlack() {
+    return new THREE.MeshStandardMaterial({
+        color: 0x181818,
+        metalness: 0.4,
+        roughness: 0.6
+    });
+}
+
+function matRed() {
+    return new THREE.MeshStandardMaterial({
+        color: 0xcc3333,
+        metalness: 0.5,
+        roughness: 0.4
+    });
+}
+
+function matAccent() {
+    return new THREE.MeshStandardMaterial({
+        color: 0xff8888,
+        metalness: 0.5,
+        roughness: 0.35
+    });
+}
+
+function init3D() {
+    const container = document.getElementById("preview3d");
+
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1b222b);
+
+    const aspect = container.clientWidth / container.clientHeight;
+    camera = new THREE.PerspectiveCamera(35, aspect, 0.1, 100);
+    camera.position.set(5, 4, 8);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    container.appendChild(renderer.domElement);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+
+    const key = new THREE.DirectionalLight(0xffffff, 1.0);
+    key.position.set(6, 10, 8);
+    scene.add(key);
+
+    const rim = new THREE.DirectionalLight(0xff5555, 0.7);
+    rim.position.set(-6, 4, -8);
+    scene.add(rim);
+
+    const floor = new THREE.Mesh(
+        new THREE.CircleGeometry(4, 48),
+        new THREE.MeshStandardMaterial({ color: 0x20252c, metalness: 0.2, roughness: 0.8 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -0.01;
+    scene.add(floor);
+
+    baseGroup = new THREE.Group();
+    scene.add(baseGroup);
+
+    const baseMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.8, 0.8, 0.3, 32),
+        matBlack()
+    );
+    baseMesh.position.y = 0.15;
+    baseGroup.add(baseMesh);
+
+    const baseBall = new THREE.Mesh(
+        new THREE.SphereGeometry(0.25, 24, 24),
+        matRed()
+    );
+    baseBall.position.y = 0.3;
+    baseGroup.add(baseBall);
+
+    lowerGroup = new THREE.Group();
+    lowerGroup.position.y = 0.55;
+    baseGroup.add(lowerGroup);
+    baseGroup.lowerGroup = lowerGroup;
+
+
+    const hingeLower = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.22, 0.22, 0.3, 24),
+        matRed()
+    );
+    hingeLower.rotation.z = Math.PI / 2;
+    lowerGroup.add(hingeLower);
+
+    const rodGeom = new THREE.CylinderGeometry(0.08, 0.08, 2.0, 24);
+    const rodMat = matBlack();
+
+    const rod1 = new THREE.Mesh(rodGeom, rodMat);
+    rod1.position.set(-0.18, 1.0, 0);
+    lowerGroup.add(rod1);
+
+    const rod2 = new THREE.Mesh(rodGeom, rodMat);
+    rod2.position.set(0.18, 1.0, 0);
+    lowerGroup.add(rod2);
+
+    upperGroup = new THREE.Group();
+    upperGroup.position.y = 2.0;
+    lowerGroup.add(upperGroup);
+    lowerGroup.upperGroup = upperGroup;
+
+    const hingeUpper = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2, 0.2, 0.3, 24),
+        matRed()
+    );
+    hingeUpper.rotation.z = Math.PI / 2;
+    upperGroup.add(hingeUpper);
+
+    const rod3 = new THREE.Mesh(rodGeom, rodMat);
+    rod3.position.set(-0.15, 0.8, 0);
+    upperGroup.add(rod3);
+
+    const rod4 = new THREE.Mesh(rodGeom, rodMat);
+    rod4.position.set(0.15, 0.8, 0);
+    upperGroup.add(rod4);
+
+    neckGroup = new THREE.Group();
+    neckGroup.position.y = 1.6;
+    upperGroup.add(neckGroup);
+    upperGroup.neckGroup = neckGroup;
+
+    const neckBall = new THREE.Mesh(
+        new THREE.SphereGeometry(0.2, 24, 24),
+        matRed()
+    );
+    neckBall.position.y = 0.1;
+    neckGroup.add(neckBall);
+
+    const neckDisk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.35, 0.35, 0.15, 32),
+        matBlack()
+    );
+    neckDisk.position.y = 0.25;
+    neckGroup.add(neckDisk);
+
+    biteGroup = new THREE.Group();
+    biteGroup.position.y = 0.25;
+    neckGroup.add(biteGroup);
+
+    const jawGeom = new THREE.BoxGeometry(0.55, 0.12, 0.12);
+    const jawMat = matAccent();
+
+    const leftPivot = new THREE.Group();
+    leftPivot.position.set(-0.20, 0, 0);
+    biteGroup.add(leftPivot);
+
+    const leftJaw = new THREE.Mesh(jawGeom, jawMat);
+    leftJaw.position.set(-0.275, 0, 0);
+    leftPivot.add(leftJaw);
+
+    const rightPivot = new THREE.Group();
+    rightPivot.position.set(0.20, 0, 0);
+    biteGroup.add(rightPivot);
+
+    const rightJaw = new THREE.Mesh(jawGeom, jawMat);
+    rightJaw.position.set(0.275, 0, 0);
+    rightPivot.add(rightJaw);
+
+    biteGroup.leftPivot = leftPivot;
+    biteGroup.rightPivot = rightPivot;
+    animate();
+    robotReady = true;
+}
+
+let idleTime = 0;
+
+function animate() {
+    requestAnimationFrame(animate);
+
+    idleTime += 0.01;
+    camera.position.x = 5 + Math.sin(idleTime) * 0.15;
+    camera.position.z = 8 + Math.cos(idleTime) * 0.15;
+    camera.lookAt(0, 1.8, 0);
+
+    renderer.render(scene, camera);
+}
+
+function update3DFromAngles(a) {
+    const rad = d => d * Math.PI / 180;
+
+    baseGroup.rotation.y = rad(a[0] - 90);
+    lowerGroup.rotation.z = rad(-(a[1] - 90));
+    upperGroup.rotation.z = rad(-(a[2] - 90));
+    neckGroup.rotation.y = rad(a[3]);
+
+    const t = THREE.MathUtils.clamp((a[4] - 20) / 160, 0, 1);
+    const maxOpen = 2;
+    const angle = maxOpen * t;
+
+    biteGroup.leftPivot.rotation.z = -angle;
+    biteGroup.rightPivot.rotation.z = angle;
+}
+
+/* ------------------ SLIDERS ------------------ */
+function createSliders() {
+    const container = document.getElementById("sliders");
+
+    for (let i = 0; i < servoNames.length; i++) {
+        const card = document.createElement("div");
+        card.className = "servo-card";
+
+        card.innerHTML = `
+            <div class="servo-label">
+                ${servoNames[i]}: <span id="val${i}">${homeAngles[i]}</span>&deg;
+            </div>
+            <input id="servo${i}" type="range" min="0" max="180" value="${homeAngles[i]}"
+                   oninput="onSliderChange(${i}, this.value)">
+        `;
+
+        container.appendChild(card);
+    }
+
+    currentAngles = [...homeAngles];
+    update3DFromAngles(currentAngles);
+}
+
+function onSliderChange(i, v) {
+    const val = parseInt(v);
+    currentAngles[i] = val;
+    updateVal(i, val);
+    update3DFromAngles(currentAngles);
+    if (!playing) send(i, val);
+}
+
+function resetAll() {
+    for (let i = 0; i < servoNames.length; i++) {
+        document.getElementById("servo" + i).value = homeAngles[i];
+        currentAngles[i] = homeAngles[i];
+        updateVal(i, homeAngles[i]);
+        send(i, homeAngles[i]);
+    }
+    update3DFromAngles(currentAngles);
+}
+
+/* ------------------ POSITION PLAYBACK (CYCLIC SAVE) ------------------ */
+function updatePosStatus() {
+    const container = document.getElementById("posStatus");
+    container.innerHTML = "";
+
+    const wrap = document.createElement("div");
+    wrap.className = "pos-container";
+
+    for (let i = 0; i < 3; i++) {
+        const pill = document.createElement("div");
+        pill.className = "pos-pill" + (savedPos[i] ? " saved" : "");
+
+        const title = document.createElement("div");
+        title.innerHTML = `<strong>Pos ${i + 1}</strong>`;
+        pill.appendChild(title);
+
+        if (savedPos[i]) {
+            const list = document.createElement("div");
+            list.style.fontSize = "14px";
+            list.style.marginTop = "6px";
+            list.innerHTML = savedPos[i]
+                .map((v, idx) => `${servoNames[idx]}: ${v}°`)
+                .join("<br>");
+            pill.appendChild(list);
+
+            const thumb = document.createElement("canvas");
+            thumb.className = "pose-thumb";
+            pill.appendChild(thumb);
+
+            renderPoseThumbnail(savedPos[i], thumb);
+        } else {
+            const empty = document.createElement("div");
+            empty.style.opacity = "0.5";
+            empty.style.marginTop = "10px";
+            empty.innerText = "empty";
+            pill.appendChild(empty);
+        }
+
+        wrap.appendChild(pill);
+    }
+
+    container.appendChild(wrap);
+}
+
+function saveNext() {
+    savedPos[saveIndex] = [...currentAngles];
+    saveIndex = (saveIndex + 1) % 3;
+    updatePosStatus();
+
+    fetch("/save_positions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ positions: savedPos })
+    });
+}
+
+function disableSliders(disabled) {
+    for (let i = 0; i < servoNames.length; i++) {
+        const s = document.getElementById("servo" + i);
+
+        if (disabled) {
+            s.style.pointerEvents = "none";
+            s.style.opacity = "0.6";
+        } else {
+            s.style.pointerEvents = "auto";
+            s.style.opacity = "1";
+        }
+    }
+}
+
+function renderPoseThumbnail(angles, canvas) {
+    if (!robotReady) return;
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setSize(120, 120);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1b222b);
+
+    const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
+    camera.position.set(4, 3, 6);
+    camera.lookAt(0, 1.5, 0);
+
+    // Lights
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+
+    const key = new THREE.DirectionalLight(0xffffff, 1.0);
+    key.position.set(5, 8, 6);
+    scene.add(key);
+
+    const rim = new THREE.DirectionalLight(0xff5555, 0.6);
+    rim.position.set(-4, 3, -5);
+    scene.add(rim);
+
+    // --- BUILD MINI ROBOT ---
+    const matB = matBlack();
+    const matR = matRed();
+    const matA = matAccent();
+
+    const base = new THREE.Group();
+    scene.add(base);
+
+    const baseMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.8, 0.8, 0.3, 32),
+        matB
+    );
+    baseMesh.position.y = 0.15;
+    base.add(baseMesh);
+
+    const baseBall = new THREE.Mesh(
+        new THREE.SphereGeometry(0.25, 24, 24),
+        matR
+    );
+    baseBall.position.y = 0.3;
+    base.add(baseBall);
+
+    const lower = new THREE.Group();
+    lower.position.y = 0.55;
+    base.add(lower);
+
+    const hingeLower = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.22, 0.22, 0.3, 24),
+        matR
+    );
+    hingeLower.rotation.z = Math.PI / 2;
+    lower.add(hingeLower);
+
+    const rodGeom = new THREE.CylinderGeometry(0.08, 0.08, 2.0, 24);
+
+    const rod1 = new THREE.Mesh(rodGeom, matB);
+    rod1.position.set(-0.18, 1.0, 0);
+    lower.add(rod1);
+
+    const rod2 = new THREE.Mesh(rodGeom, matB);
+    rod2.position.set(0.18, 1.0, 0);
+    lower.add(rod2);
+
+    const upper = new THREE.Group();
+    upper.position.y = 2.0;
+    lower.add(upper);
+
+    const hingeUpper = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2, 0.2, 0.3, 24),
+        matR
+    );
+    hingeUpper.rotation.z = Math.PI / 2;
+    upper.add(hingeUpper);
+
+    const rod3 = new THREE.Mesh(rodGeom, matB);
+    rod3.position.set(-0.15, 0.8, 0);
+    upper.add(rod3);
+
+    const rod4 = new THREE.Mesh(rodGeom, matB);
+    rod4.position.set(0.15, 0.8, 0);
+    upper.add(rod4);
+
+    const neck = new THREE.Group();
+    neck.position.y = 1.6;
+    upper.add(neck);
+
+    const neckBall = new THREE.Mesh(
+        new THREE.SphereGeometry(0.2, 24, 24),
+        matR
+    );
+    neckBall.position.y = 0.1;
+    neck.add(neckBall);
+
+    const neckDisk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.35, 0.35, 0.15, 32),
+        matB
+    );
+    neckDisk.position.y = 0.25;
+    neck.add(neckDisk);
+
+    // Apply angles
+    const rad = d => d * Math.PI / 180;
+
+    base.rotation.y = rad(angles[0] - 90);
+    lower.rotation.z = rad(-(angles[1] - 90));
+    upper.rotation.z = rad(-(angles[2] - 90));
+    neck.rotation.y = rad(angles[3]);
+
+    renderer.render(scene, camera);
+}
+
+function startPlayback() {
+    fetch("/start_playback", { method: "POST" });
+    playing = true;
+    disableSliders(true);
+    document.getElementById("playBtn").classList.add("playing");
+}
+
+function stopPlayback() {
+    fetch("/stop_playback", { method: "POST" });
+    playing = false;
+    disableSliders(false);
+    document.getElementById("playBtn").classList.remove("playing");
+}
+
+/* ------------------ INIT ------------------ */
+init3D();
+createSliders();
+updatePosStatus();
+
+/* ------------------ DRAGGABLE PREVIEW ------------------ */
+(function() {
+    const box = document.getElementById("preview3d");
+    const wrapper = document.querySelector(".preview-wrapper");
+
+    let offsetX = 0, offsetY = 0;
+    let dragging = false;
+
+    function startDrag(e) {
+        dragging = true;
+
+        const rect = box.getBoundingClientRect();
+
+        if (e.touches) {
+            offsetX = e.touches[0].clientX - rect.left;
+            offsetY = e.touches[0].clientY - rect.top;
+        } else {
+            offsetX = e.clientX - rect.left;
+            offsetY = e.clientY - rect.top;
+        }
+
+        e.preventDefault();
+    }
+
+    function drag(e) {
+        if (!dragging) return;
+
+        const wrapRect = wrapper.getBoundingClientRect();
+
+        let x, y;
+
+        if (e.touches) {
+            x = e.touches[0].clientX - wrapRect.left - offsetX;
+            y = e.touches[0].clientY - wrapRect.top - offsetY;
+        } else {
+            x = e.clientX - wrapRect.left - offsetX;
+            y = e.clientY - wrapRect.top - offsetY;
+        }
+
+        x = Math.max(0, Math.min(wrapRect.width - box.offsetWidth, x));
+        y = Math.max(0, Math.min(wrapRect.height - box.offsetHeight, y));
+
+        box.style.left = x + "px";
+        box.style.top = y + "px";
+    }
+
+    function endDrag() {
+        dragging = false;
+    }
+
+    box.addEventListener("mousedown", startDrag);
+    box.addEventListener("touchstart", startDrag);
+
+    window.addEventListener("mousemove", drag);
+    window.addEventListener("touchmove", drag);
+
+    window.addEventListener("mouseup", endDrag);
+    window.addEventListener("touchend", endDrag);
+})();
+</script>
+
+</body>
+</html>
