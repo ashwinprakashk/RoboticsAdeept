@@ -92,13 +92,19 @@ def index():
 def cmd():
     if not connected:
         return {"status": "error", "msg": "Arduino not connected"}, 503
-    data = request.json
+    data = request.get_json(silent=True) or {}
     index = int(data["index"])
     value = int(data["value"])
+    if not 0 <= index < len(current_servo_angles):
+        return {"status": "error", "msg": "index must be 0-4"}, 400
+    value = max(0, min(180, value))
     if index == 1:
         value = 180 - value
     print(f"[SERVER] servo_write {index} -> {value}")
-    Adeept.three_function("'servo_write'", index, value)
+    try:
+        Adeept.three_function("'servo_write'", index, value)
+    except Exception as e:
+        return {"status": "error", "msg": f"serial write failed: {e}"}, 503
     current_servo_angles[index] = value
     return {"status": "ok"}
 
@@ -148,7 +154,7 @@ def smooth_move_to(target_ui):
     delay = 0.02
     target = [180 - target_ui[i] if i == 1 else target_ui[i] for i in range(5)]
     current = get_current_servo_positions()
-    for s in range(steps):
+    for s in range(1, steps + 1):
         if not playback_active:
             return
         t = s / steps

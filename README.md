@@ -231,7 +231,7 @@ groups            # should now list "dialout"
 ### 4.3 Raspberry Pi: get the code and Python packages
 
 ```bash
-git clone https://github.com/<your-user>/RoboticsAdeept.git ~/RoboticsAdeept
+git clone https://github.com/ashwinprakashk/RoboticsAdeept.git ~/RoboticsAdeept
 cd ~/RoboticsAdeept
 ```
 
